@@ -77,6 +77,8 @@ public class NianticManager {
     private NianticService mNianticService;
     private final OkHttpClient mClient;
     private final OkHttpClient mPoGoClient;
+    public final int SLEEP_TIME = 500;
+    public final int MAX_ATTEMPTS = 3;
     private PokemonGo mPokemonGo;
 
     private int pokemonFound = 0;
@@ -325,6 +327,8 @@ public class NianticManager {
         });
     }
 
+
+
     public void getCatchablePokemon(final double lat, final double longitude, final double alt){
         final int myCurrentBatch = this.currentBatchCall;
         mHandler.post(new Runnable() {
@@ -332,13 +336,9 @@ public class NianticManager {
             public void run() {
                 try {
                     if (mPokemonGo != null && NianticManager.this.currentBatchCall == myCurrentBatch) {
-                        Thread.sleep(133);
-                        mPokemonGo.setLocation(lat, longitude, alt);
-                        Thread.sleep(133);
-                        List<CatchablePokemon> catchablePokemons = mPokemonGo.getMap().getCatchablePokemon();
+                        List<CatchablePokemon> catchablePokemons = getCatchablePokemon2(lat, longitude, alt);
                         if (NianticManager.this.currentBatchCall == myCurrentBatch) EventBus.getDefault().post(new CatchablePokemonEvent(catchablePokemons, lat, longitude));
                     }
-
                 } catch (LoginFailedException e) {
                     e.printStackTrace();
                     Log.e(TAG, "Failed to fetch map information via getCatchablePokemon(). Login credentials wrong or user banned. Raised: " + e.getMessage());
@@ -356,6 +356,27 @@ public class NianticManager {
             }
         });
         this.pendingSearch++;
+    }
+
+
+    public List<CatchablePokemon> getCatchablePokemon2(final double lat, final double longitude, final double alt) throws InterruptedException, RuntimeException, LoginFailedException, RemoteServerException{
+        List<CatchablePokemon> result = null;
+        for(int i = 0; i < MAX_ATTEMPTS; i++){
+            try{
+                Thread.sleep(SLEEP_TIME);
+                mPokemonGo.setLocation(lat, longitude, alt);
+                Thread.sleep(SLEEP_TIME);
+                result = mPokemonGo.getMap().getCatchablePokemon();
+            }catch(InterruptedException | RuntimeException e) {
+                if(i == MAX_ATTEMPTS-1) throw e;
+                else continue;
+            }catch(LoginFailedException | RemoteServerException e){
+                if(i == MAX_ATTEMPTS-1) throw e;
+                else continue;
+            }
+            if(result != null) break;
+        }
+        return result;
     }
 
     public void getLuredPokemon(final double lat, final double longitude, final double alt){
